@@ -1,6 +1,3 @@
-# imports
-# matplotlib
-
 import tkinter as tk
 from tkinter import filedialog
 import numpy as np
@@ -10,10 +7,8 @@ import matplotlib.pyplot as plt
 def get_integer(file):
     return struct.unpack('I', file.read(4))[0]
 
-
 def get_float(file):
     return struct.unpack('d', file.read(8))[0]
-
 
 def convert_DDR_to_TXT(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/detectdata_8_det1.DDR"):
     #dirpath = "/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/"
@@ -61,7 +56,7 @@ def convert_DDR_to_TXT(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/L
         #  there is a gap of 4 bytes that appears between
         # the last int member (i_data) and the first double member (d_data)
 
-        #gap = get_integer(file)   #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        gap = get_integer(file)   #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         # more HEADER data (doubles)...........................
         d_data = []
@@ -160,5 +155,12 @@ for count,name in enumerate(file_paths):
     lenfile = len(name)
     output_filename = name[0:len(name)-4]+".txt"
     np.savetxt(output_filename,tmp2D)
-    print(name," has been converted...")
+    print(name," has been converted to TXT...")
+
+    #output to NPY
+    output_filename = name[0:len(name)-4]+".npy"
+    np.save(output_filename,tmp2D)
+    print(name," has been converted to NPY...")
+
+
 
