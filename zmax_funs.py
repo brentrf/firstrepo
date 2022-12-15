@@ -1,18 +1,62 @@
-import tkinter as tk
-from tkinter import filedialog
+#Functions in this File
+# 1. Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere
+# 2. read_zemax_DDR
+#  2b. get_integer()
+#  2c. get_float()
+
 import numpy as np
 import struct
-import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+
+def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaAz):
+    # This function receives a 2D array of values that represent optical power
+    # at different points on a hemisphere (theta=0..90,  azim=0...360)
+    # The POWER values are converted to Radiant intensity by dividing by solid angle ~ sin(theta)
+    # and then resampled and returned as 2D array v. XY-angles
+
+    Npts_azim = np.size(Power_v_thetaAz, 0)
+    azphis = np.linspace(0, 360, Npts_azim)
+    Npts_theta = np.size(Power_v_thetaAz, 1)
+    thetas = np.linspace(0, 90, Npts_theta)
+    thetas[0] = 1
+
+    RadIntens_v_thetaAz = Power_v_thetaAz / np.sin(np.deg2rad(thetas))
+    RadIntens_v_thetaAz = np.divide(Power_v_thetaAz, np.sin(np.deg2rad(thetas)))  # should be the same
+
+    # generate vector of Radiant Intensity Values at each VIEW ANGLE XY
+    a = RadIntens_v_thetaAz
+    pvals, px, py = [], [], []
+    for kt in range(0, np.size(thetas)):
+        for kp in range(0, np.size(azphis)):
+            pvals.append(a[kp][kt])
+            R = thetas[kt]
+            px.append(R * np.cos(np.deg2rad(azphis[kp])))
+            py.append(R * np.sin(np.deg2rad(azphis[kp])))
+    # fig0, ax = plt.subplots(nrows=1, ncols=1)
+    # ax.scatter(px, py, c='k', alpha=0.2, marker='.')
+
+    # generate value-matrix of colors using GRIDDATA to  INTERPOLATE
+    POL_x = np.linspace(-90, 90, 181)
+    POL_y = np.linspace(-90, 90, 181)
+    POL_XX, POL_YY = np.meshgrid(POL_x, POL_y)
+    RadIntens_v_ViewAngleXY = griddata((px, py), pvals, (POL_XX, POL_YY), method='nearest')
+
+    return (RadIntens_v_ViewAngleXY,POL_XX,POL_YY,RadIntens_v_thetaAz,thetas,azphis)
+
 
 def get_integer(file):
     return struct.unpack('I', file.read(4))[0]
-
 def get_float(file):
     return struct.unpack('d', file.read(8))[0]
+    #these are used by read_zemax_DDR (below)
 
-def convert_DDR_to_TXT(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/detectdata_8_det1.DDR"):
-    #dirpath = "/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/"
-    #filename = dirpath + "detectdata_8_det1.DDR"
+def read_zemax_DDR(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/detectdata_8_det1.DDR"):
+    # This function receives a filename path that points to a
+    # file that is assumed to be a ZEMAX DDR detector file (binary)
+    # The file is then opened according to file format specifications in zemax documentation
+    #
+    # The contents are then returned as a dictionary called  "ddrdat"
+
 
     with open(filename, "rb") as file:  #open the file.... (within this indentation)
         # unpack little endian integers
@@ -56,7 +100,9 @@ def convert_DDR_to_TXT(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/L
         #  there is a gap of 4 bytes that appears between
         # the last int member (i_data) and the first double member (d_data)
 
-        gap = get_integer(file)   #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        #gap = get_integer(file)   #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        #this^^ line appeared in original code that I got, but leaving it in results in wacky data (e.g. 1e+163)...
+        #probably because it shifts all the bits by 4 resulting in incorrect data
 
         # more HEADER data (doubles)...........................
         d_data = []
@@ -139,28 +185,3 @@ def convert_DDR_to_TXT(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/L
     # each angular arm along the azimuthal direction.
     #For Detector Volume
     # objects, pixel  # 1 is in the (-x, -y) lower left corner of the first plane on the -Z side of the detector, and subsequent pixels move first across the columns in the +x direction, then up through the rows to (+x, +y) of the first plane. The next pixel as at the (-x, -y) corner of the next Z plane, and the pattern continues through all the Z planes.
-
-######### MAIN  #####
-
-#get the files you want to convert
-root = tk.Tk()
-root.withdraw()
-file_paths = filedialog.askopenfilenames(filetypes=[("Zemax Detector Data Files","*.DDR")])
-
-for count,name in enumerate(file_paths):
-    ddrdat = convert_DDR_to_TXT(name)
-    tmp2D = ddrdat['2DData']
-
-    #output to text file ...
-    lenfile = len(name)
-    output_filename = name[0:len(name)-4]+".txt"
-    np.savetxt(output_filename,tmp2D)
-    print(name," has been converted to TXT...")
-
-    #output to NPY
-    output_filename = name[0:len(name)-4]+".npy"
-    np.save(output_filename,tmp2D)
-    print(name," has been converted to NPY...")
-
-
-
