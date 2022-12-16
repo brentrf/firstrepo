@@ -22,7 +22,7 @@ file_paths = filedialog.askopenfilenames(filetypes=[("Zemax Detector Data Files"
 
 
 for count,filename in enumerate(file_paths):
-    filename = file_paths[0]
+    #filename = file_paths[0]
     wkspFldr = os.path.dirname(filename)  #return folder path where data gotten from
     Power_v_XY = np.load(filename)
 
