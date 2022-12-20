@@ -8,11 +8,13 @@ import numpy as np
 import struct
 from scipy.interpolate import griddata
 
-def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaAz):
+def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaAz,flag_sincorr=1):
     # This function receives a 2D array of values that represent optical power
     # at different points on a hemisphere (theta=0..90,  azim=0...360)
     # The POWER values are converted to Radiant intensity by dividing by solid angle ~ sin(theta)
     # and then resampled and returned as 2D array v. XY-angles
+    #
+    # flag_sincorr = a flag that is either 1 or 0 depending on whether the sine correction  should be applied
 
     Npts_azim = np.size(Power_v_thetaAz, 0)
     azphis = np.linspace(0, 360, Npts_azim)
@@ -20,8 +22,11 @@ def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaA
     thetas = np.linspace(0, 90, Npts_theta)
     thetas[0] = 1
 
-    RadIntens_v_thetaAz = Power_v_thetaAz / np.sin(np.deg2rad(thetas))
-    RadIntens_v_thetaAz = np.divide(Power_v_thetaAz, np.sin(np.deg2rad(thetas)))  # should be the same
+    if flag_sincorr==1:
+        RadIntens_v_thetaAz = Power_v_thetaAz / np.sin(np.deg2rad(thetas))
+        RadIntens_v_thetaAz = np.divide(Power_v_thetaAz, np.sin(np.deg2rad(thetas)))  # should be the same
+    else:
+        RadIntens_v_thetaAz = Power_v_thetaAz
 
     # generate vector of Radiant Intensity Values at each VIEW ANGLE XY
     a = RadIntens_v_thetaAz
@@ -140,17 +145,26 @@ def read_zemax_DDR(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/d
 
 
     #reshape data to 2D matrix
+    data_to_export = []
     match type_det:
         case 1:
-            data_to_export = inc_int_pos
+            data_to_export.append(inc_int_pos)
+            data_to_export.append(inc_int_ang)
+            data_to_export.append(coh_real)
+            data_to_export.append(coh_imag)
         case 3:
-            data_to_export = ang_P
-    tmp2D = np.zeros([i_data[1],i_data[0]])
-    for count,value in enumerate(data_to_export):
-        kc = np.mod(count,i_data[0])
-        kr = int((count - kc+1)/i_data[1])
-        tmp2D[kr][kc]=value
-        #print(kc,kr) # this line for for debugging
+            data_to_export.append(ang_P)
+            data_to_export.append(ang_Xtri)
+            data_to_export.append(ang_Ytri)
+            data_to_export.append(ang_Ztri)
+
+    tmp3D = np.zeros([i_data[1],i_data[0],4])
+    for ii in range(0,4):
+        for count,value in enumerate(data_to_export[ii]):
+            kc = np.mod(count,i_data[0])
+            kr = int((count - kc+1)/i_data[1])
+            tmp3D[kr,kc,ii]=value
+            #print(kc,kr) # this line for for debugging
 
 #    #output to text file ...
 #    lenfile = len(filename)
@@ -169,7 +183,7 @@ def read_zemax_DDR(filename="/Users/brentfisher/Documents/Zemax/MODELS_XDC/LTM/d
     ddrdat['n_rays_angular_detector'] = n_rays_angular_detector
     ddrdat['i_data'] = i_data
     ddrdat['d_data'] = d_data
-    ddrdat['2DData'] = tmp2D
+    ddrdat['3DData'] = tmp3D
 
     return ddrdat
 
