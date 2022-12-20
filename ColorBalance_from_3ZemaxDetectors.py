@@ -91,9 +91,22 @@ Z_blu = (L_blu / cy_0['b']) * (1 - cx_0['b'] - cy_0['b'])
 X_tot = X_red + X_grn + X_blu
 Y_tot = L_red + L_grn + L_blu
 Z_tot = Z_red + Z_grn + Z_blu
-
+XYZ_tot = np.stack((X_tot,Y_tot,Z_tot),2)
+XYZ_tot / XYZ_tot.max()
+#chromaticity values
 x = X_tot / (X_tot+Y_tot+Z_tot)
 y = Y_tot / (X_tot+Y_tot+Z_tot)
+
+
+#Plot Tristimulus Colors
+fig0 = plt.figure
+plt.imshow(XYZ_tot,extent=(-90,90,-90,90))
+plt.xlabel('Left-Right Angle [deg]')
+plt.ylabel('Up-Down Angle [deg]')
+plt.title('XYZ Tristimulus Colors  v. ViewAngle\n' + 'file:    '+ file_path_X.split("/")[-1][:-4])
+outfilename = file_path_X.split("/")[-1][:-4] + "_TriStimColor_New1.png"
+plt.savefig(wkspFldr + "/" + outfilename)
+
 
 #Compute Deviation Relative to Center
 x0 = x[int(x.shape[0]/2)][int(x.shape[1]/2)] #center
@@ -103,17 +116,20 @@ r_colordeviation_B[ POL_RR > 88] = 0   #set points outside circle to zero
 
 # ********** END of ALTERNATIVE METHOD *********
 
+
+
+
 #Plot Color Deviation
 r_colordeviation = r_colordeviation_A
 #r_colordeviation = r_colordeviation_B
-plt.figure()
+fig1 = plt.figure()
 plt.pcolor(POL_XX, POL_YY, r_colordeviation)
 plt.xlabel('Left-Right Angle [deg]')
 plt.ylabel('Up-Down Angle [deg]')
 plt.colorbar()
 plt.clim(0,0.4)
 plt.title("Deviation of CIE1931(x,y) ColorBalance v. ViewAngle")
-outfilename = file_path_X.split("/")[-1][:-4] + "_ColorDeviation.png"
+outfilename = file_path_X.split("/")[-1][:-4] + "_ColorDeviation_New1.png"
 plt.savefig(wkspFldr + "/" + outfilename)
 
 #Save Text
