@@ -5,8 +5,71 @@
 #  2c. get_float()
 
 import numpy as np
+import scipy as sp
 import struct
 from scipy.interpolate import griddata
+
+
+
+#from: https://stackoverflow.com/questions/43086557/convolve2d-just-by-using-numpy
+def np_conv2d(a, f):
+    s = f.shape + tuple(np.subtract(a.shape, f.shape) + 1)
+    strd = np.lib.stride_tricks.as_strided
+    subM = strd(a, shape = s, strides = a.strides * 2)
+    return np.einsum('ij,ijkl->kl', f, subM)
+def sp_conv2d(a, sigma_y,sigma_x):
+    sigma = [sigma_y, sigma_x]
+    y = sp.ndimage.filters.gaussian_filter(a, sigma, mode='constant')
+    return y
+
+def sp_conv2d_byfft(a,f):
+    in1 = a
+    ntopbot = ( a.shape[0]-f.shape[0] ) / 2
+    if ntopbot == np.floor(ntopbot):
+        ntop = int(ntopbot)
+        nbot = int(ntopbot)
+    else:
+        ntop = int(np.ceil(ntopbot))
+        nbot = int(np.floor(ntopbot))
+    nleftright = ( a.shape[1]-f.shape[1] ) / 2
+    if nleftright == np.floor(nleftright):
+        nleft  = int(nleftright)
+        nright = int(nleftright)
+    else:
+        nleft  = int(np.ceil(nleftright))
+        nright = int(np.floor(nleftright))
+    in2 = np.pad(f, ((ntop,nbot),(nleft, nright)), 'constant', constant_values=((0,0),(0,0)) )
+    aconv = sp.signal.fftconvolve(in1, in2, mode='same', axes=None)
+    #aconv_full = sp.signal.fftconvolve(in1, in2, mode='full', axes=None)
+    #aconv_valid = sp.signal.fftconvolve(in1, in2, mode='valid', axes=None)
+    return aconv
+
+
+def np_conv2d_byfft(a,f):   #NOT WORKING YET
+    ntopbot = ( a.shape[0]-f.shape[0] ) / 2
+    if ntopbot == np.floor(ntopbot):
+        ntop = int(ntopbot)
+        nbot = int(ntopbot)
+    else:
+        ntop = int(np.ceil(ntopbot))
+        nbot = int(np.floor(ntopbot))
+    nleftright = ( a.shape[1]-f.shape[1] ) / 2
+    if nleftright == np.floor(nleftright):
+        nleft  = int(nleftright)
+        nright = int(nleftright)
+    else:
+        nleft  = int(np.ceil(nleftright))
+        nright = int(np.floor(nleftright))
+    fp = np.pad(f, ((ntop,nbot),(nleft, nright)), 'constant', constant_values=((0,0),(0,0)) )
+
+    fft_a = np.fft.fft2(a)
+    s = a.shape
+    fft_fp = np.fft.fft2(f,s)
+    fft_aconv = fft_a*fft_fp
+    aconv = np.fft.ifft2(fft_aconv)
+    return aconv
+
+
 
 def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaAz,flag_sincorr=1):
     # This function receives a 2D array of values that represent optical power
@@ -22,11 +85,35 @@ def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaA
     thetas = np.linspace(0, 90, Npts_theta)
     thetas[0] = 1
 
+    #sine() correction
     if flag_sincorr==1:
         RadIntens_v_thetaAz = Power_v_thetaAz / np.sin(np.deg2rad(thetas))
         RadIntens_v_thetaAz = np.divide(Power_v_thetaAz, np.sin(np.deg2rad(thetas)))  # should be the same
     else:
         RadIntens_v_thetaAz = Power_v_thetaAz
+
+    #apply smoothing if desired
+    smooth_width_AZ_deg = 0
+    smooth_width_THETA_deg = 0
+    if (smooth_width_AZ_deg>1)&(smooth_width_THETA_deg>1):
+        kernel_size_AZ = int(np.round((Npts_azim/360)*smooth_width_AZ_deg,0))
+        kernel_size_THETA = int(np.round((Npts_theta/90)*smooth_width_THETA_deg,0))
+        sigma_y = kernel_size_THETA
+        sigma_x = kernel_size_AZ
+        tmp = sp_conv2d(RadIntens_v_thetaAz, sigma_y, sigma_x)
+        print(np.size(RadIntens_v_thetaAz))
+        print(np.size(tmp))
+
+        kernel = np.ones([kernel_size_AZ,kernel_size_THETA]) / (kernel_size_AZ*kernel_size_THETA)
+        print(kernel_size_AZ)
+        print(kernel_size_THETA)
+        print(kernel)
+        print(np.size(RadIntens_v_thetaAz))
+        tmp2 = np_conv2d(RadIntens_v_thetaAz, kernel)
+        RadIntens_v_thetaAz = tmp2
+        print(np.size(RadIntens_v_thetaAz))
+
+        RadIntens_v_thetaAz = tmp
 
     # generate vector of Radiant Intensity Values at each VIEW ANGLE XY
     a = RadIntens_v_thetaAz
@@ -45,6 +132,7 @@ def Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaA
     POL_y = np.linspace(-90, 90, 181)
     POL_XX, POL_YY = np.meshgrid(POL_x, POL_y)
     RadIntens_v_ViewAngleXY = griddata((px, py), pvals, (POL_XX, POL_YY), method='nearest')
+    # method = 'nearest'  method = 'linear' method = 'cubic'
 
     return (RadIntens_v_ViewAngleXY,POL_XX,POL_YY,RadIntens_v_thetaAz,thetas,azphis)
 

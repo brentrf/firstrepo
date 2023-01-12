@@ -19,18 +19,21 @@ from tkinter import filedialog
 import numpy as np
 import struct
 import matplotlib.pyplot as plt
+import zmax_funs as zf
 from scipy.interpolate import griddata
 
 #WHITEPOINT @ NORMAL(0)
 cx_0 = {'r':0.68, 'g':0.265, 'b':0.135}
-cy_0 = {'r':0.32, 'g':0.69, 'b':0.054}
-L0   = {'r':0.24,'g':0.69, 'b':0.07}
-#calc cx,cy of RGB Mix:
-x0_mix = ( cx_0['r']/cy_0['r']*L0['r'] \
+cy_0 = {'r':0.32, 'g':0.69,  'b':0.054}
+L0   = {'r':0.24, 'g':0.69,  'b':0.07}
+#these are the (cx,cy,L) values of each LED (r, g, b)
+
+#calc cx,cy of RGB Mix (at normal viewing angle)(:
+cx0_mix = ( cx_0['r']/cy_0['r']*L0['r'] \
         + cx_0['g']/cy_0['g']*L0['g'] \
         + cx_0['b']/cy_0['b']*L0['b'] ) \
         / ( L0['r']/cy_0['r'] + L0['g']/cy_0['g'] + L0['b']/cy_0['b'] )
-y0_mix = ( L0['r'] + L0['g']  + L0['b'] ) \
+cy0_mix = ( L0['r'] + L0['g']  + L0['b'] ) \
           / ( L0['r']/cy_0['r'] + L0['g']/cy_0['g'] + L0['b']/cy_0['b'] )
 
     #User: SELECT NPY files
@@ -46,9 +49,9 @@ file_path_Z = filedialog.askopenfilename(filetypes=[("Zemax Detector Data Files"
 wkspFldr = os.path.dirname(file_path_X)  # return folder path where data gotten from
 
 #Load 2D Array Data for X,Y,Z tristimulus values
-Pow_Red = np.load(file_path_X)
-Pow_Grn = np.load(file_path_Y)
-Pow_Blu = np.load(file_path_Z)
+Pow_Red = np.load(file_path_X)[:,:,0]
+Pow_Grn = np.load(file_path_Y)[:,:,0]
+Pow_Blu = np.load(file_path_Z)[:,:,0]
 
 #check that array sizes are same
 if (Pow_Red.shape[0] != Pow_Grn.shape[0]) or (Pow_Red.shape[0] != Pow_Blu.shape[0]) or (Pow_Red.shape[1] != Pow_Grn.shape[1]) or (Pow_Red.shape[1] != Pow_Blu.shape[1]):
@@ -71,16 +74,26 @@ Pow0_Blu = Pow_Blu[int(Pow_Blu.shape[0]/2)][int(Pow_Blu.shape[1]/2)]
 L_red = Pow_Red * L0['r']/Pow0_Red
 L_grn = Pow_Grn * L0['g']/Pow0_Grn
 L_blu = Pow_Blu * L0['b']/Pow0_Blu
-x_mix = ( cx_0['r']/cy_0['r']*L_red  \
+cx_mix = ( cx_0['r']/cy_0['r']*L_red  \
         + cx_0['g']/cy_0['g']*L_grn  \
         + cx_0['b']/cy_0['b']*L_blu ) \
         / ( L_red/cy_0['r'] + L_grn/cy_0['g'] + L_blu/cy_0['b'] )
-y_mix = ( L_red + L_grn + L_blu ) \
+cy_mix = ( L_red + L_grn + L_blu ) \
           / ( L_red/cy_0['r'] + L_grn/cy_0['g'] + L_blu/cy_0['b'] )
-r_colordeviation_A = ((x_mix-x0_mix)**2+(y_mix-y0_mix)**2)**0.5  #definition of DEVIATION
+r_colordeviation_A = ((cx_mix-cx0_mix)**2+(cy_mix-cy0_mix)**2)**0.5  #definition of DEVIATION
 r_colordeviation_A[ POL_RR > 88] = 0   #set points outside circle to zero
 
+ #smoothing - inquiry
+smooth_input_pixels = int(input("Smoothing: convolve with how many pixel window (0=none)?   "))
+if (smooth_input_pixels>0):
+    f = np.ones([smooth_input_pixels,smooth_input_pixels]) / (smooth_input_pixels)**2
+    L_red = zf.sp_conv2d_byfft(L_red, f)
+    L_grn = zf.sp_conv2d_byfft(L_grn, f)
+    L_blu = zf.sp_conv2d_byfft(L_blu, f)
+
+
 # ********  Alternative Method.... ****************
+# (see:  https://en.wikipedia.org/wiki/CIE_1931_color_space  )
 #Compute TriStimulusValues at each View Angle
 X_red = L_red * (cx_0['r'] / cy_0['r'])
 X_grn = L_grn * (cx_0['g'] / cy_0['g'])
@@ -92,18 +105,22 @@ X_tot = X_red + X_grn + X_blu
 Y_tot = L_red + L_grn + L_blu
 Z_tot = Z_red + Z_grn + Z_blu
 XYZ_tot = np.stack((X_tot,Y_tot,Z_tot),2)
-XYZ_tot / XYZ_tot.max()
+XYZ_tot_sum = X_tot + Y_tot + Z_tot
+#XYZ_tot / XYZ_tot.max()
+
+#for kk in range(0,2):
+#    XYZ_tot[:,:,kk] = XYZ_tot[:,:,kk]  / XYZ_tot_sum
+
 #chromaticity values
 x = X_tot / (X_tot+Y_tot+Z_tot)
 y = Y_tot / (X_tot+Y_tot+Z_tot)
 
-
-#Plot Tristimulus Colors
+#Plot - Tristimulus ***** COLOR PLOT ******
 fig0 = plt.figure
-plt.imshow(XYZ_tot,extent=(-90,90,-90,90))
+plt.imshow(np.flipud(XYZ_tot),extent=(-90,90,-90,90))
 plt.xlabel('Left-Right Angle [deg]')
 plt.ylabel('Up-Down Angle [deg]')
-plt.title('XYZ Tristimulus Colors  v. ViewAngle\n' + 'file:    '+ file_path_X.split("/")[-1][:-4])
+plt.title('XYZ Tristimulus = RGB Colors  v. ViewAngle\n' + 'file:    '+ file_path_X.split("/")[-1][:-4])
 outfilename = file_path_X.split("/")[-1][:-4] + "_TriStimColor_New1.png"
 plt.savefig(wkspFldr + "/" + outfilename)
 

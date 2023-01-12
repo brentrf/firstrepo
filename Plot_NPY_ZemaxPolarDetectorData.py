@@ -30,7 +30,7 @@ file_paths = filedialog.askopenfilenames(filetypes=[("Zemax Detector Data Files"
 #         print("your answer must be '1' or '2' !!! ")
 
 for count,filename in enumerate(file_paths):
-    filename = file_paths[0]
+    #filename = file_paths[0]
     wkspFldr = os.path.dirname(filename)  #return folder path where data gotten from
     IN = np.load(filename)
 
@@ -40,6 +40,15 @@ for count,filename in enumerate(file_paths):
     # Convert Power_v_ThetaAz  to Radiant_Intensity_v_XYViewing (using function in zmax_funs)
     (RadIntens_v_ViewAngleXY, POL_XX, POL_YY, RadIntens_v_thetaAz, thetas, azphis) \
         = zf.Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(Power_v_thetaAz, 1)
+
+    #smoothing
+    if count==0:
+        sigma_input = float(input("Gaussian Smoothing: what sigma (pixels)?   "))
+    if sigma_input>0:
+        sigma_y = sigma_input
+        sigma_x = sigma_input
+        RadIntens_v_ViewAngleXY = zf.sp_conv2d(RadIntens_v_ViewAngleXY, sigma_y, sigma_x)
+
 
     #create output Matrix (3D)
     OUT = np.zeros([POL_XX.shape[0],POL_XX.shape[1],IN.shape[2]])
@@ -51,7 +60,7 @@ for count,filename in enumerate(file_paths):
         flag_sine_correction = 1
         (OUT[:, :, kk+1], POL_XX, POL_YY, RadIntens_v_thetaAz, thetas, azphis) \
             = zf.Convert_OptPower_v_SPHERICALAngles_to_XYAngles_FullHemisphere(XYZtri_v_thetaAz[:,:,kk],flag_sine_correction)
-        print(kk)
+        #print(kk)
 
     # Save NPY & Text: RadIntens_v_XYangle + XYZTristimulus values
     outfilename = filename.split("/")[-1][:-4] + "_v_XYangle.npy"
@@ -93,17 +102,23 @@ for count,filename in enumerate(file_paths):
     plt.ylabel('Up-Down Angle [deg]')
     plt.colorbar()
     plt.title(filename.split("/")[-1] + '\n' + 'Rel. Radiant Intensity [W/sr] v. Viewing Angle')
-    outfilename = filename.split("/")[-1][:-4] + ".png"
+    outfilename = filename.split("/")[-1][:-4] + "_RadIntensity.png"
     plt.savefig(wkspFldr + "/" + outfilename)
 
-    # PLOT 4: Tristim Values v. View Angle
-    XYZtri_v_ViewAngle = OUT[:, :, 1:]
+
+
+
+    # PLOT 4: Tristim from Zemax v. View Angle  ***** COLOR PLOT ******
+    XYZtri_v_ViewAngle = OUT[:, :, 1:]   #get X,Y,Z from zemax
+    XYZtri_v_ViewAngle = XYZtri_v_ViewAngle/XYZtri_v_ViewAngle.max()  #normalize make brighter plot
 
     fig11 = plt.figure()
-    plt.pcolor(XYZtri_v_ViewAngle[:,:,2])
-
-
-
+    plt.imshow(np.flipud(XYZtri_v_ViewAngle), extent=(-90, 90, -90, 90))
+    plt.xlabel('Left-Right Angle [deg]')
+    plt.ylabel('Up-Down Angle [deg]')
+    plt.title('XYZ Tristimulus = RGB Colors  v. ViewAngle\n' + 'file:    ' + filename.split("/")[-1][:-4])
+    outfilenameXYZ = filename.split("/")[-1][:-4] + "_TriStimFromZMX_Color.png"
+    plt.savefig(wkspFldr + "/" + outfilenameXYZ)
 
     print("Done with: "+filename.split("/")[-1])
 
